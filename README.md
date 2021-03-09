@@ -9,8 +9,14 @@ This repository holds the sources for the LVI-LFB Control Flow Hijacking attack 
 
 ## Prerequisites
 
-1. Visual Studio 2015
+1. nasm, gcc, make
 2. A vulnerable Intel CPU
+
+## Tested Environment
+
+CPU            | OS           | Kernel         | GCC version | NASM version | Vulnerable?
+---            | ---          | ---            | :---:       | :---:        | :---:
+Intel i7-8700K | Ubuntu 18.04 | 5.4.0-generic  | 7.5.0       | 2.13.02      | Yes
 
 ## Authors
 
