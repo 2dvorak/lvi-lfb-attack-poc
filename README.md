@@ -14,9 +14,10 @@ This repository holds the sources for the LVI-LFB Control Flow Hijacking attack 
 
 ## Tested Environment
 
-CPU            | OS           | Kernel         | GCC version | NASM version | Vulnerable?
----            | ---          | ---            | :---:       | :---:        | :---:
-Intel i7-8700K | Ubuntu 18.04 | 5.4.0-generic  | 7.5.0       | 2.13.02      | Yes
+CPU            | OS           | Kernel           | GCC version | NASM version | Vulnerable?
+---            | ---          | ---              | :---:       | :---:        | :---:
+Intel i7-8700K | Ubuntu 18.04 | 5.4.0-66-generic | 7.5.0       | 2.13.02      | Yes
+Intel E-2274G  | Ubuntu 18.04 | 5.4.0-66-generic | 7.5.0       | 2.13.02      | Yes
 
 ## Authors
 
