@@ -68,35 +68,29 @@ VictimFunctionTsx:
     mfence
     xbegin      __abort_tsx
     mov         rax, 0000000000000000h      ; [1]
-    ;jmp         qword ptr [rax]             ; [2]
-    jmp         qword [rax]             ; [2]
+    jmp         qword [rax]                 ; [2]
     xend
 __abort_tsx:
     mfence
     ret
-;VictimFunctionTsx ENDP
 
 
 ;
 ; VictimFunctionFault - jump to [0] outside a transaction. Many times the CPU would read stale data from the LFB
 ; and it would branch to those addresses.
 ;
-;VictimFunctionFault PROC
 GLOBAL VictimFunctionFault
 VictimFunctionFault:
     mfence
     mov         rax, 0000000000000000h      ; Load 0 in RAX.
-    ;jmp         qword ptr [rax]             ; Normally this will branch to whatever is in the LFBs.
-    jmp         qword [rax]             ; Normally this will branch to whatever is in the LFBs.
+    jmp         qword [rax]                 ; Normally this will branch to whatever is in the LFBs.
     mfence
     ret
-;VictimFunctionFault ENDP
 
 
 ;
 ; MeasureAccessTime
 ;
-;MeasureAccessTime PROC
 GLOBAL MeasureAccessTime
 MeasureAccessTime:
     mfence
@@ -120,6 +114,3 @@ MeasureAccessTime:
     mfence
 
     ret
-;MeasureAccessTime ENDP
-
-;    END
